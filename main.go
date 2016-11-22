@@ -2,68 +2,75 @@ package main
 
 import (
 	"os"
-	"fmt"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"io/ioutil"
+	"errors"
 )
 
 func main() {
-	pidOfProcs := getAllProcessPids()
-	memOfProcs := make([]int, len(pidOfProcs))
-	for i, pid := range pidOfProcs {
-		memOfProcs[i] = getUsedMemory(pid)
+	PIDs, err := getAllProcessPids()
+	if err != nil {
+		panic(err)
 	}
-	big := biggestProcess(memOfProcs)
-	if big > 0 {
-		killProcess(pidOfProcs[big])
+
+	memPID := getUsedMemory(PIDs)
+	posBigProc, err := biggestProcess(memPID)
+	if err != nil {
+		panic(err)
 	}
+
+	killProcess(PIDs[posBigProc])
 }
 
-func getAllProcessPids() []string {
-	processes, err := filepath.Glob("/proc/[0-9]*") //get all files in /proc
-	if err != nil {
-		fmt.Println(err)
-	}
-	return processes
+func getAllProcessPids() ([]string, error) {
+	return filepath.Glob("/proc/[0-9]*") //get all files in /proc
+
 }
 
-func getUsedMemory(pid string) int {
-	status, err := ioutil.ReadFile(pid+"/statm")
-	if err != nil {
-		fmt.Println(err)
+func getUsedMemory(pids []string) ([]int) {
+	memOfProc := make([]int, len(pids))
+	for i, pid := range pids{
+		status, err := ioutil.ReadFile(pid+"/statm")
+		if err != nil {
+			panic(err)
+		}
+
+		memOfProc[i], err = strconv.Atoi(strings.Split(string(status), " ")[1])
+		if err != nil {
+			panic(err)
+		}
 	}
-	ret, err := strconv.Atoi(strings.Split(string(status), " ")[1])
-	if err != nil {
-		fmt.Println(err)
-	}
-	return ret
+	return memOfProc //с производительностью все ок, слайсы передаются по указателю
 }
 
-func biggestProcess(memory []int) int {
+func biggestProcess(memory []int) (int, error) {
 	var max, ans int
+	if len(memory) == 0 {
+		return 0, errors.New("No values in memory array")
+	}
 	for i, mem := range memory {
 		if mem > max {
 			ans = i
 			max = mem
 		}
 	}
-	if max != 0 {
-		return ans
-	}else{
-		return -1
+	if max == 0 {
+		return 0, errors.New("Max values is null")
+	} else {
+		return ans, nil
 	}
 }
 
 func killProcess(pid string) {
 	pidInt, err := strconv.Atoi(pid[6:])
 	if err != nil{
-		fmt.Println(err)
+		panic(err)
 	}
 	proc, err := os.FindProcess(pidInt)
 	if err != nil{
-		fmt.Println(err)
+		panic(err)
 	}
 	proc.Kill()
 }
